@@ -1,9 +1,8 @@
 package main
 
 import (
-	"github.com/palladiate/gom/player"
+	"github.com/palladiate/gom/listeners"
 	"log"
-	"net"
 )
 
 type Server struct {
@@ -13,25 +12,19 @@ type Server struct {
 }
 
 func main() {
-	gom := Server{
-		Host: "localhost",
-		Port: "9000",
-		Type: "tcp",
-	}
+	gom := listeners.NewTelnet("localhost", 9000)
 
-	listener, err := net.Listen(gom.Type, gom.Host+":"+gom.Port)
-	if err != nil {
-		panic(err)
-	}
-	defer listener.Close()
-	log.Printf("Server listening on %s, port %s", gom.Host, gom.Port)
+	go gom.Start()
+	defer gom.Stop()
+	var gomPlayers = gom.PlayerChannel()
+
+	log.Printf("Server listening on %s, port %v", gom.Host, gom.Port)
+
 	for {
-		conn, err := listener.Accept()
-		if err != nil {
-			panic(err)
+		select {
+		case toon := <- gomPlayers:
+			log.Print("Player returned.")
+			go toon.Play()
 		}
-
-		toon := player.NewPlayer(conn)
-		go toon.Play()
 	}
 }

@@ -2,12 +2,16 @@ package player
 
 import (
 	"bufio"
+	"fmt"
 	"log"
 	"net"
+	"strings"
 )
 
 type Player struct {
 	conn net.Conn
+	reader *bufio.Scanner
+	writer *bufio.Writer
 	Char Character
 }
 
@@ -42,11 +46,18 @@ var abilities Commands = Commands{
 		Short: "unknown",
 		Emit: "That won't work!",
 	},
+	"echo": Command{
+		Name: "Echo",
+		Short: "echo",
+		Emit: "%s",
+	},
 }
 
 func NewPlayer(conn net.Conn) Player {
 	return Player{
 		conn: conn,
+		reader: bufio.NewScanner(conn),
+		writer: bufio.NewWriter(conn),
 		Char: Character{
 			Name: "Some newb",
 			Class: "Noob",
@@ -55,35 +66,53 @@ func NewPlayer(conn net.Conn) Player {
 }
 
 func (p Player) Play() {
+	var err error
 	cont := true
 	defer p.conn.Close()
 
-	read := bufio.NewScanner(p.conn)
-	write := bufio.NewWriter(p.conn)
-
 	for cont {
-		if read.Scan() {
-			log.Printf("read %s\n", read.Text())
-			c := parseCommand(read.Text())
+		if p.reader.Scan() {
+			log.Printf("read %s\n", p.reader.Text())
+			c, args := parseCommand(p.reader.Text())
 			if c.Name == "Exit" {
 				cont = false
 			}
-			_, err := write.WriteString(c.Emit)
-			_, err = write.WriteString("\n")
-			write.Flush()
-			log.Printf("%s invoked %s", p.Char.Name, c.Name)
+			err = p.Send(c.Emit, args...)
 			if err != nil {
 				log.Panic(err)
 			}
+			log.Printf("%s invoked %s", p.Char.Name, c.Name)
 		}
 	}
 }
 
-func parseCommand(l string) (c Command) {
+func parseCommand(l string) (c Command, args []string) {
 	var found bool
-	if c, found = abilities[l]; !found {
+	invocation := strings.Fields(l)
+	switch {
+	case len(invocation) == 0:
+		c = abilities["error"]
+		return
+	case len(invocation) > 1:
+		args = invocation[1:]
+	}
+
+	if c, found = abilities[invocation[0]]; !found {
 		c = abilities["error"]
 	}
 	return
 }
+
+func (p Player) Send(s string, args ...string) (err error) {
+	bytesWritten, err := fmt.Fprintf(p.writer, s+"\n")
+	p.writer.Flush()
+	log.Printf("%v bytes sent to %s", bytesWritten, p.Char.Name)
+	return
+}
+
+func (c Command) GoString() (s string) {
+
+	return
+}
+
 
